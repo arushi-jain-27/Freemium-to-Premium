@@ -1,0 +1,352 @@
+---
+title: "Causal Inference"
+output: html_document
+date: "2022-11-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(MatchIt)
+library(gdata)
+library(imputeTS)
+library("lmtest") #coeftest
+library("sandwich") #vcovCL
+library(dplyr)
+```
+
+```{r}
+highnote = read.csv("High_Note_data_csv.csv", stringsAsFactors =FALSE)
+#highnote$male = factor(highnote$male)
+#highnote$good_country = factor(highnote$good_country)
+```
+
+```{r}
+hn = select(highnote, c('age','male', 'good_country', 'tenure', 'delta1_friend_cnt', 'delta1_subscriber_friend_cnt', 'delta1_friend_country_cnt' ,'delta1_posts', 'delta1_playlists', 'delta1_shouts', 'delta1_lovedTracks', 'delta1_songsListened', 'adopter'))
+hn$sub_friend_ratio = ifelse(hn$delta1_friend_cnt==0, 0, hn$delta1_subscriber_friend_cnt/hn$delta1_friend_cnt)
+hn$country_friend_ratio = ifelse(hn$delta1_friend_cnt==0, 0, hn$delta1_friend_country_cnt/hn$delta1_friend_cnt)
+hn$delta1_friend_cnt = NULL
+hn$delta1_subscriber_friend_cnt = NULL
+hn$delta1_friend_country_cnt = NULL
+colnames(hn)[which(names(hn) == "delta1_posts")] <- "posts"
+colnames(hn)[which(names(hn) == "delta1_playlists")] <- "playlists"
+colnames(hn)[which(names(hn) == "delta1_shouts")] <- "shouts"
+colnames(hn)[which(names(hn) == "delta1_lovedTracks")] <- "lovedTracks"
+colnames(hn)[which(names(hn) == "delta1_songsListened")] <- "songsListened"
+
+```
+
+
+**The following analysis is on the delta1 of these variables**
+
+
+Subscriber Friend Ratio
+```{r}
+cutoff = quantile(hn$sub_friend_ratio, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(sub_friend_ratio <= cutoff ~ 0, sub_friend_ratio > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+Use demographics, engagement
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    songsListened + lovedTracks + posts + shouts + playlists, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    songsListened + lovedTracks + posts + shouts + playlists, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+
+```{r}
+plot(summary(m.out1))
+```
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    songsListened + lovedTracks + posts + shouts + playlists, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
+
+Country Friend Count
+```{r}
+cutoff = quantile(hn$country_friend_ratio, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(country_friend_ratio <= cutoff ~ 0, country_friend_ratio > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    songsListened + lovedTracks + posts + shouts + playlists, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+
+
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    songsListened + lovedTracks + posts + shouts + playlists, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+```{r}
+plot(summary(m.out1))
+```
+
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    songsListened + lovedTracks + posts + shouts + playlists, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
+
+
+
+SongsListened
+```{r}
+cutoff = quantile(hn$songsListened, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(songsListened <= cutoff ~ 0, songsListened > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+
+
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+```{r}
+plot(summary(m.out1))
+```
+
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
+
+
+lovedTracks
+```{r}
+cutoff = quantile(hn$lovedTracks, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(lovedTracks <= cutoff ~ 0, lovedTracks > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+
+
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+```{r}
+plot(summary(m.out1))
+```
+
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
+
+
+
+posts
+```{r}
+cutoff = quantile(hn$posts, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(posts <= cutoff ~ 0, posts > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+
+
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+```{r}
+plot(summary(m.out1))
+```
+
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
+
+
+
+shouts
+```{r}
+cutoff = quantile(hn$shouts, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(shouts <= cutoff ~ 0, shouts > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+
+
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+```{r}
+plot(summary(m.out1))
+```
+
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
+
+
+
+Playlists
+```{r}
+cutoff = quantile(hn$playlists, 0.25, na.rm = TRUE)
+hn_test = hn %>% mutate(treatment=case_when(playlists <= cutoff ~ 0, playlists > cutoff ~ 1))
+hn_test = na.omit(hn_test)
+```
+
+```{r}
+m.out0 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = NULL, distance = "glm")
+summary(m.out0)
+```
+
+
+```{r}
+m.out1 <- matchit(treatment ~ age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+                  data = hn_test, method = "nearest", distance = "glm", ratio = 1)
+summary(m.out1)
+```
+
+```{r}
+summary(m.out1, un = FALSE)
+```
+
+```{r}
+plot(summary(m.out1))
+```
+
+
+```{r}
+m.data1 <- match.data(m.out1)
+fit1 <- glm(adopter ~ treatment + age + male + good_country + tenure + 
+                    sub_friend_ratio + country_friend_ratio, 
+            data = m.data1, weights = weights)
+summary(fit1)
+```
+
+```{r}
+exp(fit1$coefficients[2])
+```
